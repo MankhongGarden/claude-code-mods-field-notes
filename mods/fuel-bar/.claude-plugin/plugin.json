@@ -1,0 +1,10 @@
+{
+  "name": "fuel-bar",
+  "author": { "name": "MankhongGarden" },
+  "version": "0.2.0",
+  "description": "Two-line footer under the prompt: turn, model, effort, context gauge to auto-compact, 5h/7D quota; then project, weather, time worked and the latest mod toast",
+  "types": "./types/index.d.ts",
+  "dependencies": [
+    "thai-mode"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "thai-mode",
+  "author": { "name": "MankhongGarden" },
+  "version": "0.1.0",
+  "description": "Shows tool rows, collapsed groups, spinner, turn duration and small hints in plain Thai; /thai toggles",
+  "types": "./types/index.d.ts"
+}
