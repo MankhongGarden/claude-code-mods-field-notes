@@ -8,6 +8,7 @@ One long session of building Claude Code mods on Windows 11, written up honestly
 |---|---|---|
 | [fuel-bar](#fuel-bar-context--quota-footer) | in daily use | The engine gives you context, auto-compact threshold and rate limits for free after every turn. No polling, no tokens. |
 | [thai-mode](#thai-mode-claude-code-in-thai) | in daily use | You can re-render tool rows, groups, spinner and turn duration. You cannot touch the prompt box. |
+| [task-band](#task-band-background-work-above-the-prompt) | new, day two | The engine tells a mod when an agent ends right away, but shell/monitor/workflow ends only reach it at the next tool call while Claude is busy. And there is no progress % for anything. |
 | [Matrix intro](#matrix-boot-intro) | in daily use | A sequential intro always leaves a blank gap. Run it in parallel and stop on a file Claude writes before its first frame. |
 | [Safe updater](#safe-updater-for-the-npm-install) | in daily use | Auto-update on Windows can leave `claude.exe` as a 500-byte stub. Stage, verify, then rename-and-swap. |
 | [Right-side pane + widgets](#tried-and-dropped) | dropped | The dock frame belongs to the engine, and Thai text breaks in the Windows Terminal grid with every font I tried. |
@@ -60,6 +61,31 @@ Things I learned:
 
 - In this version even a single `Edit` gets folded into a `ToolGroup`, so your nice single-row rendering mostly shows up only in `ctrl+o`.
 - Command output and diffs stay as they are. Translating those would be lying about what ran.
+
+## task-band: background work above the prompt
+
+![task-band](docs/img/task-band.png)
+
+A framed band above the prompt (AbovePrompt) titled "งานเบื้องหลัง" (background work). Each running subagent, Workflow, background shell and Monitor gets one chip with its own gauge, 3 per page:
+
+- **Workflow:** agents finished / agents started (1/2) plus elapsed time.
+- **Single agent:** an estimated ~62% once this agent type has finished at least 3 times (average kept in $.store), otherwise a sweeping line plus elapsed time.
+- **Shell / Monitor:** sweeping line plus elapsed time. Nothing reports real progress.
+- Running chips come first, finished ones (✓ / ✗) after them, and finished chips stay until the turn ends. Within each group chips keep the order you started them in.
+- When a task starts or ends, the band jumps to its page for 3 seconds. Ctrl+X then Tab focuses the band, ← / → page, Esc goes back to the prompt.
+
+What the API gives you (build 2.1.292):
+
+- gent.spawn answers with an gentId. Its end is 	urn.complete carrying that gentId, and it arrives **immediately**. Workflow agents come through gent.spawn too, with .workflow.runId.
+- Background Bash/PowerShell results carry ackgroundTaskId. Monitor and Workflow results carry 	askId (Workflow also unId and workflowName).
+- Their end arrives as prompt.submit with origin.kind === 'task-notification', with <task-id> and <status> in the text. When Claude is idle that is instant. While a turn runs it waits for the next tool-call boundary (I measured 4.3 s late).
+- Results of tool calls sent in parallel come back in any order. To keep chips in the order you started them, take the order key when the hook is entered, **before** wait next(e).
+
+Things that bit me:
+
+- Box takes orderStyle but has no border title. Laying a position: "absolute" title over the border line shifted the whole screen sideways and left it garbled until a resize forced a full redraw. The frame is now three plain Text rows sized to odyColumns (the engine draws [-] at the far right of the band).
+- Windows Terminal gives Thai above/below marks zero cells, the same as the engine does. Don't pad widths to "fix" the mis-spaced look. It only misaligns the frame.
+- Engine notices still render between the band and the prompt (the reason project-band was dropped). Here it matters less, because the band is only there while something runs.
 
 ## Matrix boot intro
 
@@ -146,9 +172,10 @@ Mockups in a browser lie about fonts, colors and cell widths. What I used instea
 claude plugin marketplace add <path-to-clone>\mods
 claude plugin install fuel-bar@field-notes-mods --scope user
 claude plugin install thai-mode@field-notes-mods --scope user
+claude plugin install task-band@field-notes-mods --scope user
 ```
 
-Plugins are read from that folder in place: edit a file, then run `/reload-plugins`. `claude plugin test <folder>` runs the tests (fuel-bar 7, thai-mode 5).
+Plugins are read from that folder in place: edit a file, then run `/reload-plugins`. `claude plugin test <folder>` runs the tests (fuel-bar 7, thai-mode 5, task-band 13).
 
 For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `claude-update-safe.ps1` and `claude-launcher.cmd` in one folder on your `PATH`.
 
@@ -160,6 +187,7 @@ For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `
 
 - **fuel-bar:** แถบ 2 บรรทัดใต้ช่องพิมพ์ แสดง turn, โมเดล, effort, เกจ context (นับถึงจุด auto-compact), โควตา 5 ชม./7 วัน, ชื่อโปรเจกต์, อากาศ และเวลาที่ทำงานมาแล้ว ข้อมูลมาจาก engine หลังจบแต่ละ turn จึงไม่กิน token
 - **thai-mode:** แปลแถวเครื่องมือ, แถวสรุปที่พับไว้, spinner และเวลาที่ใช้ต่อ turn เป็นภาษาไทยด้วยพจนานุกรมในตัว `/thai` ใช้สลับเปิด/ปิด
+- **task-band:** กรอบ "งานเบื้องหลัง" เหนือช่องพิมพ์ แสดง agent, Workflow, คำสั่งเบื้องหลัง และ Monitor ทีละ 3 งาน แต่ละงานมีเกจของตัวเอง งานที่รันอยู่ขึ้นก่อน กด Ctrl+X แล้ว Tab เพื่อเลื่อนหน้าด้วยลูกศร
 - **Matrix intro:** แสดงฝนตัวอักษรระหว่างรอ Claude โหลด ต้องรันขนานกับ Claude และหยุดเมื่อ `numStartups` เพิ่ม ถ้ารันเรียงกันจะมีจอว่างเสมอ
 - **ตัวอัปเดตปลอดภัย:** แก้ปัญหา auto-update ทำให้ `claude.exe` เหลือไฟล์ 500 ไบต์ ใช้วิธีติดตั้งแยกไว้ก่อน ตรวจว่าใช้ได้ แล้วค่อยเปลี่ยนชื่อสลับไฟล์
 - **ที่ลองแล้วไม่เวิร์ค:**

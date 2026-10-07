@@ -13,6 +13,11 @@
       "name": "thai-mode",
       "source": "./thai-mode",
       "description": "Tool rows, collapsed groups, spinner, turn duration and hints in plain Thai; /thai toggles"
+    },
+    {
+      "name": "task-band",
+      "source": "./task-band",
+      "description": "Framed band above the prompt: running subagents, workflows, background shells and monitors, each with its own gauge"
     }
   ]
 }
