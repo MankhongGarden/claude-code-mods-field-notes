@@ -9,6 +9,7 @@ One long session of building Claude Code mods on Windows 11, written up honestly
 | [fuel-bar](#fuel-bar-context--quota-footer) | in daily use | The engine gives you context, auto-compact threshold and rate limits for free after every turn. No polling, no tokens. |
 | [thai-mode](#thai-mode-claude-code-in-thai) | in daily use | You can re-render tool rows, groups, spinner and turn duration. You cannot touch the prompt box. |
 | [task-band](#task-band-background-work-above-the-prompt) | new, day two | The engine tells a mod when an agent ends right away, but shell/monitor/workflow ends only reach it at the next tool call while Claude is busy. And there is no progress % for anything. |
+| [paste-peek](#paste-peek-see-the-image-you-just-pasted-windows) | new, day three | The mod API can draw images only through the kitty protocol, which Windows Terminal lacks. A tiny native window beside the terminal does the job, and Claude Code already saves each pasted image to disk before you send. |
 | [Matrix intro](#matrix-boot-intro) | in daily use | A sequential intro always leaves a blank gap. Run it in parallel and stop on a file Claude writes before its first frame. |
 | [Safe updater](#safe-updater-for-the-npm-install) | in daily use | Auto-update on Windows can leave `claude.exe` as a 500-byte stub. Stage, verify, then rename-and-swap. |
 | [Right-side pane + widgets](#tried-and-dropped) | dropped | The dock frame belongs to the engine, and Thai text breaks in the Windows Terminal grid with every font I tried. |
@@ -76,16 +77,44 @@ A framed band above the prompt (AbovePrompt) titled "งานเบื้อง
 
 What the API gives you (build 2.1.292):
 
-- gent.spawn answers with an gentId. Its end is 	urn.complete carrying that gentId, and it arrives **immediately**. Workflow agents come through gent.spawn too, with .workflow.runId.
-- Background Bash/PowerShell results carry ackgroundTaskId. Monitor and Workflow results carry 	askId (Workflow also unId and workflowName).
-- Their end arrives as prompt.submit with origin.kind === 'task-notification', with <task-id> and <status> in the text. When Claude is idle that is instant. While a turn runs it waits for the next tool-call boundary (I measured 4.3 s late).
-- Results of tool calls sent in parallel come back in any order. To keep chips in the order you started them, take the order key when the hook is entered, **before** wait next(e).
+- `agent.spawn` answers with an `agentId`. Its end is `turn.complete` carrying that `agentId`, and it arrives **immediately**. Workflow agents come through `agent.spawn` too, with `e.workflow.runId`.
+- Background Bash/PowerShell results carry `backgroundTaskId`. Monitor and Workflow results carry `taskId` (Workflow also `runId` and `workflowName`).
+- Their end arrives as `prompt.submit` with `origin.kind === 'task-notification'`, with `<task-id>` and `<status>` in the text. When Claude is idle that is instant. While a turn runs it waits for the next tool-call boundary (I measured 4.3 s late).
+- Results of tool calls sent in parallel come back in any order. To keep chips in the order you started them, take the order key when the hook is entered, **before** `await next(e)`.
 
 Things that bit me:
 
-- Box takes orderStyle but has no border title. Laying a position: "absolute" title over the border line shifted the whole screen sideways and left it garbled until a resize forced a full redraw. The frame is now three plain Text rows sized to odyColumns (the engine draws [-] at the far right of the band).
+- `Box` takes `borderStyle` but has no border title. Laying a `position: "absolute"` title over the border line shifted the whole screen sideways and left it garbled until a resize forced a full redraw. The frame is now three plain `Text` rows sized to `bodyColumns` (the engine draws `[-]` at the far right of the band).
 - Windows Terminal gives Thai above/below marks zero cells, the same as the engine does. Don't pad widths to "fix" the mis-spaced look. It only misaligns the frame.
 - Engine notices still render between the band and the prompt (the reason project-band was dropped). Here it matters less, because the band is only there while something runs.
+
+## paste-peek: see the image you just pasted (Windows)
+
+![paste-peek](docs/img/paste-peek.png)
+
+**Windows only. Experimental, day one.** Claude Code shows a pasted image as `[Image #1]` and nothing else, so you can't tell whether you attached the right screenshot until Claude answers. paste-peek opens a small strip in the bottom-right corner of your Windows Terminal window with a thumbnail of every `[Image #N]` in your draft:
+
+- Click a thumbnail to enlarge it, click again to shrink. The strip never takes focus, so you keep typing.
+- Delete `[Image #2]` from the draft and #2 leaves the strip. Send the message and the strip closes.
+- Works for `Alt+V` pastes and for files dragged onto the terminal.
+- Stays with its own terminal window: it follows moves, hides when you switch to another app or minimize, and comes back when you return.
+
+Why a separate window: the mod API has an `Image` element, but the engine draws it only through the kitty graphics protocol, which Windows Terminal doesn't speak, so you just get the alt text. I also tried a `Raster` of half-block characters (`▀`, two pixels per cell). It works everywhere, but a 6-row thumbnail is about 21×12 pixels, which is too blurry to tell screenshots apart.
+
+How it works:
+
+- The mod reads the draft (`$.prompt.read()`) every 250 ms and writes the list of `[Image #N]` numbers to a small state file in `%TEMP%`.
+- On the first image it starts `peek.exe` (C#, WinForms, about 475 lines in `native/peek.cs`). The exe watches the state file with a `FileSystemWatcher` and closes itself when the file goes empty, which the mod does on submit.
+- **Where the pictures come from:** Claude Code writes every attached image to `%TEMP%\claude\<project-slug>\<session-id>\images\<N>.<ext>` as soon as you paste or drop it, before you send. This is undocumented and may change in a future version. Claude Code skips this when transcript saving is off (for example a session started from inside another Claude session, which shows a "Transcript saving is off" notice), and the strip then says "no preview". My first build read the clipboard instead, and a dragged file then showed whatever image was last copied.
+- The exe ties itself to the Windows Terminal window that was in front when you pasted, and listens for `EVENT_SYSTEM_FOREGROUND` and location changes. No polling.
+
+Measured on my laptop: about 24 MB private memory and 0% CPU while the strip is open, nothing at all while there are no images, and the strip appears in about 0.2 s.
+
+**No binary in this repo.** On first use the mod compiles `native/peek.cs` with the C# compiler that ships with Windows (`%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, .NET Framework 4.x) into `%LOCALAPPDATA%\paste-peek\`. That takes about a second, once.
+
+Options (`/config`): label language (`en` / `th`), theme (`dark` / `light`), and the distance from the window's bottom and right edges. The default bottom distance clears a two-line footer. Raise it if the strip covers your prompt.
+
+Tested end to end in a fresh session: first-use compile, dark theme, English labels, a pasted image showing in the strip. Not handled yet: more than one terminal tab in the same window (the strip follows the window, not the tab), and terminals other than Windows Terminal.
 
 ## Matrix boot intro
 
@@ -173,9 +202,10 @@ claude plugin marketplace add <path-to-clone>\mods
 claude plugin install fuel-bar@field-notes-mods --scope user
 claude plugin install thai-mode@field-notes-mods --scope user
 claude plugin install task-band@field-notes-mods --scope user
+claude plugin install paste-peek@field-notes-mods --scope user
 ```
 
-Plugins are read from that folder in place: edit a file, then run `/reload-plugins`. `claude plugin test <folder>` runs the tests (fuel-bar 7, thai-mode 5, task-band 13).
+Plugins are read from that folder in place: edit a file, then run `/reload-plugins`. `claude plugin test <folder>` runs the tests (fuel-bar 7, thai-mode 5, task-band 13, paste-peek 4).
 
 For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `claude-update-safe.ps1` and `claude-launcher.cmd` in one folder on your `PATH`.
 
@@ -188,6 +218,7 @@ For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `
 - **fuel-bar:** แถบ 2 บรรทัดใต้ช่องพิมพ์ แสดง turn, โมเดล, effort, เกจ context (นับถึงจุด auto-compact), โควตา 5 ชม./7 วัน, ชื่อโปรเจกต์, อากาศ และเวลาที่ทำงานมาแล้ว ข้อมูลมาจาก engine หลังจบแต่ละ turn จึงไม่กิน token
 - **thai-mode:** แปลแถวเครื่องมือ, แถวสรุปที่พับไว้, spinner และเวลาที่ใช้ต่อ turn เป็นภาษาไทยด้วยพจนานุกรมในตัว `/thai` ใช้สลับเปิด/ปิด
 - **task-band:** กรอบ "งานเบื้องหลัง" เหนือช่องพิมพ์ แสดง agent, Workflow, คำสั่งเบื้องหลัง และ Monitor ทีละ 3 งาน แต่ละงานมีเกจของตัวเอง งานที่รันอยู่ขึ้นก่อน กด Ctrl+X แล้ว Tab เพื่อเลื่อนหน้าด้วยลูกศร
+- **paste-peek (Windows):** กรอบรูปเล็กลอยที่มุมขวาล่างของ Windows Terminal แสดงรูปทุก `[Image #N]` ที่วางหรือลากมาไว้ในข้อความ ก่อนกดส่ง คลิกเพื่อขยาย ลบ `[Image #N]` แล้วรูปหายจากกรอบ กดส่งแล้วกรอบปิดเอง ซ่อนเมื่อสลับไปหน้าต่างอื่น ใช้ RAM ประมาณ 24 MB เฉพาะตอนมีรูปแนบ ไม่แนบไฟล์ exe ไว้ใน repo แต่จะคอมไพล์จากโค้ดต้นฉบับตอนใช้ครั้งแรก
 - **Matrix intro:** แสดงฝนตัวอักษรระหว่างรอ Claude โหลด ต้องรันขนานกับ Claude และหยุดเมื่อ `numStartups` เพิ่ม ถ้ารันเรียงกันจะมีจอว่างเสมอ
 - **ตัวอัปเดตปลอดภัย:** แก้ปัญหา auto-update ทำให้ `claude.exe` เหลือไฟล์ 500 ไบต์ ใช้วิธีติดตั้งแยกไว้ก่อน ตรวจว่าใช้ได้ แล้วค่อยเปลี่ยนชื่อสลับไฟล์
 - **ที่ลองแล้วไม่เวิร์ค:**

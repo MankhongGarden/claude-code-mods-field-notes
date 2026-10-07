@@ -18,6 +18,11 @@
       "name": "task-band",
       "source": "./task-band",
       "description": "Framed band above the prompt: running subagents, workflows, background shells and monitors, each with its own gauge"
+    },
+    {
+      "name": "paste-peek",
+      "source": "./paste-peek",
+      "description": "Windows only: floating strip over Windows Terminal that previews each pasted or dropped [Image #N] until you send"
     }
   ]
 }

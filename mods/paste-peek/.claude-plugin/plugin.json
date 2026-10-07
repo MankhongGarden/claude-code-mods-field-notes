@@ -1,0 +1,39 @@
+{
+  "name": "paste-peek",
+  "version": "0.2.0",
+  "description": "Windows only: a small floating strip over Windows Terminal that previews each [Image #N] you paste or drop, until you send",
+  "author": { "name": "MankhongGarden" },
+  "license": "MIT",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Label language",
+      "description": "Language of the strip's labels",
+      "options": ["en", "th"],
+      "default": "en"
+    },
+    "theme": {
+      "type": "string",
+      "title": "Theme",
+      "description": "Colors of the strip; match your terminal background",
+      "options": ["dark", "light"],
+      "default": "dark"
+    },
+    "bottom_offset": {
+      "type": "number",
+      "title": "Distance from window bottom",
+      "description": "Pixels at 100% scaling between the strip and the bottom of the terminal window; raise it if the strip covers your prompt or status lines",
+      "default": 91,
+      "min": 0,
+      "max": 600
+    },
+    "right_offset": {
+      "type": "number",
+      "title": "Distance from window right edge",
+      "description": "Pixels at 100% scaling between the strip and the right edge of the terminal window",
+      "default": 27,
+      "min": 0,
+      "max": 600
+    }
+  }
+}
