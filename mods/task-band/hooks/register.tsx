@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { BandJump, BandTask, TaskStatus } from '../types'
-import { average, C, cellWidth, chipSegs, clampPage, clearFinished, insertOrdered, navLabel, pageOf, paginate, parseNotifications, pushSample, segWidth, statusOf, viewOrder, frameTop, frameBottom, rowPad } from './logic'
+import { average, C, cellWidth, chipSegs, clampPage, clearFinished, insertOrdered, navLabel, pageOf, paginate, parseNotifications, pushSample, segWidth, statusOf, stoppedTaskId, viewOrder, frameTop, frameBottom, rowPad } from './logic'
 
 const tasks = atom({ plugin: 'task-band', key: 'tasks' } as const, [] as BandTask[])
 const page = atom({ plugin: 'task-band', key: 'page' } as const, 0)
@@ -109,6 +109,9 @@ export const register: Register = on => {
     } else if (e.tool === 'Monitor') {
       const id = res.taskId
       if (typeof id === 'string') await addTask($, { id, taskId: id, kind: 'mon', label: String(e.description || 'monitor'), startedAt: at, order, status: 'running' })
+    } else if (e.tool === 'TaskStop') {
+      const id = stoppedTaskId(e as unknown as Record<string, unknown>)
+      if (id) await finish($, t => t.taskId === id || t.id === id, statusOf('stopped'))
     } else if (e.tool === 'Workflow') {
       const id = res.taskId
       const runId = typeof res.runId === 'string' ? res.runId : undefined
@@ -178,6 +181,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const list = viewOrder((await read($, tasks)) ?? [])
     if (e.props.hasSurvey || list.length === 0) return next(e)
+    const above = await next(e)
     const [t, p, j, at] = await Promise.all([read($, tick), read($, page), read($, jump), now($)])
     const chips = list.map(task => chipSegs(task, at, t))
     const pages = paginate(chips.map(segWidth), e.props.bodyColumns - 1 - FRAME)
@@ -195,6 +199,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        {above}
         <Text color={C.faint}>{frameTop(W)}</Text>
         <Box flexDirection="row">
           <Text color={C.faint}>│ </Text>

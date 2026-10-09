@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { average, insertOrdered, viewOrder, cellWidth, chipSegs, frameBottom, frameTop, rowPad, clearFinished, clock, estimate, navLabel, pageOf, paginate, parseNotifications, pushSample, segWidth, statusOf } from '../hooks/logic'
+import { average, insertOrdered, viewOrder, cellWidth, chipSegs, frameBottom, frameTop, rowPad, clearFinished, clock, estimate, navLabel, pageOf, paginate, parseNotifications, pushSample, segWidth, statusOf, stoppedTaskId } from '../hooks/logic'
 import type { BandTask } from '../types'
 
 const T0 = 1_000_000
@@ -88,4 +88,12 @@ test('tasks keep the order they were started in, not the order results came back
 test('running tasks show before finished ones, each group in start order', () => {
   const t = (id: string, status: BandTask['status']): BandTask => ({ id, kind: 'sh', label: id, startedAt: T0, status })
   expect(viewOrder([t('1', 'done'), t('2', 'running'), t('3', 'fail'), t('4', 'running')]).map(x => x.id).join('')).toBe('2413')
+})
+
+test('TaskStop input gives the stopped task id', () => {
+  expect(stoppedTaskId({ task_id: 'bsf2igl3k' })).toBe('bsf2igl3k')
+  expect(stoppedTaskId({ shell_id: ' b1 ' })).toBe('b1')
+  expect(stoppedTaskId({})).toBe(undefined)
+  expect(stoppedTaskId({ task_id: '' })).toBe(undefined)
+  expect(statusOf('stopped')).toBe('fail')
 })

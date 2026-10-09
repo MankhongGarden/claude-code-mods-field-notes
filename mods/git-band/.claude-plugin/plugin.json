@@ -1,0 +1,7 @@
+{
+  "name": "git-band",
+  "version": "0.1.2",
+  "description": "แถบเหนือ prompt เตือน repo ที่ session นี้แตะแล้วยังไม่ commit / ยังไม่ push พร้อมปุ่ม commit และ push",
+  "types": "./types/index.d.ts"
+}
+

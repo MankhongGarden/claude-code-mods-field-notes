@@ -1,6 +1,6 @@
 {
   "name": "task-band",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Framed band above the prompt: running subagents, workflows, background shells and monitors, each with its own gauge; ctrl+x tab then arrows to page",
   "types": "./types/index.d.ts"
 }

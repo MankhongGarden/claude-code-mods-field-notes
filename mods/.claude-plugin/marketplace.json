@@ -23,6 +23,11 @@
       "name": "paste-peek",
       "source": "./paste-peek",
       "description": "Windows only: floating strip over Windows Terminal that previews each pasted or dropped [Image #N] until you send"
+    },
+    {
+      "name": "git-band",
+      "source": "./git-band",
+      "description": "Band above the prompt for repos this session touched that still have uncommitted or unpushed work, with commit and push buttons"
     }
   ]
 }

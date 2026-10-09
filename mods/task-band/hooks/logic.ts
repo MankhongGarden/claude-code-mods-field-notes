@@ -153,6 +153,11 @@ export function parseNotifications(text: string): Array<{ id: string; status: st
   return out
 }
 
+export function stoppedTaskId(input: Record<string, unknown>): string | undefined {
+  const id = input.task_id ?? input.shell_id
+  return typeof id === 'string' && id.trim() ? id.trim() : undefined
+}
+
 export function statusOf(word: string | undefined): TaskStatus {
   if (word === 'failed' || word === 'killed' || word === 'error' || word === 'stopped') return 'fail'
   return 'done'

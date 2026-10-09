@@ -8,8 +8,9 @@ One long session of building Claude Code mods on Windows 11, written up honestly
 |---|---|---|
 | [fuel-bar](#fuel-bar-context--quota-footer) | in daily use | The engine gives you context, auto-compact threshold and rate limits for free after every turn. No polling, no tokens. |
 | [thai-mode](#thai-mode-claude-code-in-thai) | in daily use | You can re-render tool rows, groups, spinner and turn duration. You cannot touch the prompt box. |
-| [task-band](#task-band-background-work-above-the-prompt) | new, day two | The engine tells a mod when an agent ends right away, but shell/monitor/workflow ends only reach it at the next tool call while Claude is busy. And there is no progress % for anything. |
+| [task-band](#task-band-background-work-above-the-prompt) | in daily use | The engine tells a mod when an agent ends right away, but shell/monitor/workflow ends only reach it at the next tool call while Claude is busy. And there is no progress % for anything. |
 | [paste-peek](#paste-peek-see-the-image-you-just-pasted-windows) | new, day three | The mod API can draw images only through the kitty protocol, which Windows Terminal lacks. A tiny native window beside the terminal does the job, and Claude Code already saves each pasted image to disk before you send. |
+| [git-band](#git-band-uncommitted-and-unpushed-work-above-the-prompt) | new, day four | Two bands in `AbovePrompt` hide each other unless each one awaits `next(e)` and stacks the result. The engine has no git events, so the mod works out which repos the session touched from the tool calls. |
 | [Matrix intro](#matrix-boot-intro) | in daily use | A sequential intro always leaves a blank gap. Run it in parallel and stop on a file Claude writes before its first frame. |
 | [Safe updater](#safe-updater-for-the-npm-install) | in daily use | Auto-update on Windows can leave `claude.exe` as a 500-byte stub. Stage, verify, then rename-and-swap. |
 | [Right-side pane + widgets](#tried-and-dropped) | dropped | The dock frame belongs to the engine, and Thai text breaks in the Windows Terminal grid with every font I tried. |
@@ -87,6 +88,31 @@ Things that bit me:
 - `Box` takes `borderStyle` but has no border title. Laying a `position: "absolute"` title over the border line shifted the whole screen sideways and left it garbled until a resize forced a full redraw. The frame is now three plain `Text` rows sized to `bodyColumns` (the engine draws `[-]` at the far right of the band).
 - Windows Terminal gives Thai above/below marks zero cells, the same as the engine does. Don't pad widths to "fix" the mis-spaced look. It only misaligns the frame.
 - Engine notices still render between the band and the prompt (the reason project-band was dropped). Here it matters less, because the band is only there while something runs.
+- 0.2.2: a task stopped with `TaskStop` now ends its chip right away (marked ✗) instead of spinning until the stop notice arrives. The band also renders what other mods put in `AbovePrompt` first, see git-band below.
+
+## git-band: uncommitted and unpushed work above the prompt
+
+A one-line band above the prompt, shown only while Claude is idle, listing every repo **this session touched** that still has work to save:
+
+`git ค้าง  my-app ●3 [ commit ] │ notes ↑1 [ push ]`
+
+- `●3` = three changed files, `↑1` = one commit not on the remote yet.
+- **[ commit ]** sends Claude a prompt to read the diff, split it into commits by topic and skip secrets or junk files, then tell you what it skipped. It does not push.
+- **[ push ]** runs `git push` from the mod itself, no tokens. It shows `⠹ กำลัง push`, then `✓ push แล้ว` for 5 seconds. On failure it shows a short reason (needs pull / login / network) and a **[ ให้ Claude แก้ ]** button that hands the full git error to Claude.
+- Labels are in Thai. Change the strings in `logic.ts` and `register.tsx` if you want them in English.
+
+How it decides which repos to watch:
+
+- The session's starting folder.
+- The folder of every file Claude writes with `Edit` / `Write` / `NotebookEdit`.
+- Any absolute path in `cd`, `Set-Location`, `pushd` or `git -C` inside a Bash or PowerShell command.
+- Each folder is resolved once with `git rev-parse --show-toplevel` and cached. The band refreshes on `turn.complete` for the main agent only, so a subagent finishing doesn't make it flicker.
+
+Things that bit me:
+
+- **Bands hide each other.** If a mod's `AbovePrompt` handler returns its own element without calling `next(e)`, every band from another mod disappears. Await `next(e)` and put the result above or below yours. task-band was fixed for the same reason.
+- **Which GitHub account pushes.** With several accounts in Git Credential Manager, a plain `git push` can pick the wrong one and fail with 403. If the repo has no `credential.username` set, the mod adds `-c credential.username=<owner from the remote URL>` for that one push.
+- A repo with no upstream still shows `↑N`: the mod counts commits not on any remote (`rev-list HEAD --not --remotes`) and pushes with `-u`.
 
 ## paste-peek: see the image you just pasted (Windows)
 
@@ -203,9 +229,10 @@ claude plugin install fuel-bar@field-notes-mods --scope user
 claude plugin install thai-mode@field-notes-mods --scope user
 claude plugin install task-band@field-notes-mods --scope user
 claude plugin install paste-peek@field-notes-mods --scope user
+claude plugin install git-band@field-notes-mods --scope user
 ```
 
-Plugins are read from that folder in place: edit a file, then run `/reload-plugins`. `claude plugin test <folder>` runs the tests (fuel-bar 7, thai-mode 5, task-band 13, paste-peek 4).
+Plugins are read from that folder in place: edit a file, then run `/reload-plugins`. `claude plugin test <folder>` runs the tests (fuel-bar 7, thai-mode 5, task-band 14, paste-peek 4, git-band 9).
 
 For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `claude-update-safe.ps1` and `claude-launcher.cmd` in one folder on your `PATH`.
 
@@ -219,6 +246,7 @@ For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `
 - **thai-mode:** แปลแถวเครื่องมือ, แถวสรุปที่พับไว้, spinner และเวลาที่ใช้ต่อ turn เป็นภาษาไทยด้วยพจนานุกรมในตัว `/thai` ใช้สลับเปิด/ปิด
 - **task-band:** กรอบ "งานเบื้องหลัง" เหนือช่องพิมพ์ แสดง agent, Workflow, คำสั่งเบื้องหลัง และ Monitor ทีละ 3 งาน แต่ละงานมีเกจของตัวเอง งานที่รันอยู่ขึ้นก่อน กด Ctrl+X แล้ว Tab เพื่อเลื่อนหน้าด้วยลูกศร
 - **paste-peek (Windows):** กรอบรูปเล็กลอยที่มุมขวาล่างของ Windows Terminal แสดงรูปทุก `[Image #N]` ที่วางหรือลากมาไว้ในข้อความ ก่อนกดส่ง คลิกเพื่อขยาย ลบ `[Image #N]` แล้วรูปหายจากกรอบ กดส่งแล้วกรอบปิดเอง ซ่อนเมื่อสลับไปหน้าต่างอื่น ใช้ RAM ประมาณ 24 MB เฉพาะตอนมีรูปแนบ ไม่แนบไฟล์ exe ไว้ใน repo แต่จะคอมไพล์จากโค้ดต้นฉบับตอนใช้ครั้งแรก
+- **git-band:** แถบเหนือช่องพิมพ์ เตือน repo ที่ session นี้แตะแล้วยังไม่ commit (●) หรือยังไม่ push (↑) ปุ่ม commit ให้ Claude อ่าน diff แล้วแยก commit ตามเรื่อง ปุ่ม push ให้ mod push เองโดยไม่กิน token ถ้าไม่ผ่านมีปุ่มให้ Claude แก้ · บทเรียน: แถบใน `AbovePrompt` หลายตัวต้อง `await next(e)` แล้ววางซ้อนกัน ไม่งั้นบังกันเอง
 - **Matrix intro:** แสดงฝนตัวอักษรระหว่างรอ Claude โหลด ต้องรันขนานกับ Claude และหยุดเมื่อ `numStartups` เพิ่ม ถ้ารันเรียงกันจะมีจอว่างเสมอ
 - **ตัวอัปเดตปลอดภัย:** แก้ปัญหา auto-update ทำให้ `claude.exe` เหลือไฟล์ 500 ไบต์ ใช้วิธีติดตั้งแยกไว้ก่อน ตรวจว่าใช้ได้ แล้วค่อยเปลี่ยนชื่อสลับไฟล์
 - **ที่ลองแล้วไม่เวิร์ค:**
