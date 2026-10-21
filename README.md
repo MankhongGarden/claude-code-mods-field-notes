@@ -2,15 +2,15 @@
 
 One long session of building Claude Code mods on Windows 11, written up honestly: **what shipped, what I tried and threw away, and why**. Most mod repos only show the finished screenshot. This one also keeps the failures, because they say more about the mod API than the wins do.
 
-> **Status: experimental, day one.** Built on Claude Code 2.1.291 and still loading on 2.1.292. Tested on one machine: Windows 11, Windows Terminal 1.24, Cascadia Code, a cream background (`#F2F0DA`), 134 columns, fullscreen mode. The mod API is new and may change under you. Issues welcome.
+> **Status: two weeks of daily use.** Built on Claude Code 2.1.291 (2026-10-06). Still loading, with every test passing, on 2.1.306 (2026-10-21), after 12 updates and no change needed for the engine. Tested on one machine: Windows 11, Windows Terminal 1.24, Cascadia Code, a cream background (`#F2F0DA`), 134 columns, fullscreen mode. The mod API is still new and may change under you. Issues welcome.
 
 | Piece | Status | One-line lesson |
 |---|---|---|
 | [fuel-bar](#fuel-bar-context--quota-footer) | in daily use | The engine gives you context, auto-compact threshold and rate limits for free after every turn. No polling, no tokens. |
 | [thai-mode](#thai-mode-claude-code-in-thai) | in daily use | You can re-render tool rows, groups, spinner and turn duration. You cannot touch the prompt box. |
 | [task-band](#task-band-background-work-above-the-prompt) | in daily use | The engine tells a mod when an agent ends right away, but shell/monitor/workflow ends only reach it at the next tool call while Claude is busy. And there is no progress % for anything. |
-| [paste-peek](#paste-peek-see-the-image-you-just-pasted-windows) | new, day three | The mod API can draw images only through the kitty protocol, which Windows Terminal lacks. A tiny native window beside the terminal does the job, and Claude Code already saves each pasted image to disk before you send. |
-| [git-band](#git-band-uncommitted-and-unpushed-work-above-the-prompt) | new, day four | Two bands in `AbovePrompt` hide each other unless each one awaits `next(e)` and stacks the result. The engine has no git events, so the mod works out which repos the session touched from the tool calls. |
+| [paste-peek](#paste-peek-see-the-image-you-just-pasted-windows) | in daily use | The mod API can draw images only through the kitty protocol, which Windows Terminal lacks. A tiny native window beside the terminal does the job, and Claude Code already saves each pasted image to disk before you send. |
+| [git-band](#git-band-uncommitted-and-unpushed-work-above-the-prompt) | in daily use | Two bands in `AbovePrompt` hide each other unless each one awaits `next(e)` and stacks the result. The engine has no git events, so the mod works out which repos the session touched from the tool calls. |
 | [Matrix intro](#matrix-boot-intro) | in daily use | A sequential intro always leaves a blank gap. Run it in parallel and stop on a file Claude writes before its first frame. |
 | [Safe updater](#safe-updater-for-the-npm-install) | in daily use | Auto-update on Windows can leave `claude.exe` as a 500-byte stub. Stage, verify, then rename-and-swap. |
 | [Right-side pane + widgets](#tried-and-dropped) | dropped | The dock frame belongs to the engine, and Thai text breaks in the Windows Terminal grid with every font I tried. |
@@ -18,6 +18,17 @@ One long session of building Claude Code mods on Windows 11, written up honestly
 | [matrix-rain as a mod](#tried-and-dropped) | dropped | `session.start` fires after the first frame. Too late for a loading screen. |
 | [Rounded prompt box](#tried-and-dropped) | not possible | The prompt input is not a render site. |
 | [Context Router, prismantis](#considered-and-declined) | declined | Already built in / clashes with thai-mode and adds tokens per prompt. |
+
+## Two weeks later (2026-10-21)
+
+- **Engine updates:** Claude Code went from 2.1.291 to 2.1.306 in 12 updates. None of the mods needed a change for that. Every fix below came from using them, not from the API moving.
+- **Safe updater:** all 12 updates went through it. Once (2026-10-07) the staged download was the 500-byte stub. The script refused it and left the working exe in place, which is the case it was written for.
+- **Bugs found in daily use:**
+  - task-band: a task stopped with `TaskStop` kept spinning until the session ended (fixed, see task-band).
+  - task-band and git-band: two `AbovePrompt` bands hid each other (fixed, see git-band).
+  - git-band: in a Gerrit repo (changes go up with `git cl upload`, not `git push`) the band showed `↑1` and a push button that could only fail. Fixed in 0.1.3.
+  - git-band: files Claude deliberately left out of a commit (scratch files, secrets) kept the band nagging forever. Fixed in 0.1.3.
+- No bugs turned up in fuel-bar, thai-mode, paste-peek or the Matrix intro.
 
 ---
 
@@ -113,12 +124,14 @@ Things that bit me:
 - **Bands hide each other.** If a mod's `AbovePrompt` handler returns its own element without calling `next(e)`, every band from another mod disappears. Await `next(e)` and put the result above or below yours. task-band was fixed for the same reason.
 - **Which GitHub account pushes.** With several accounts in Git Credential Manager, a plain `git push` can pick the wrong one and fail with 403. If the repo has no `credential.username` set, the mod adds `-c credential.username=<owner from the remote URL>` for that one push.
 - A repo with no upstream still shows `↑N`: the mod counts commits not on any remote (`rev-list HEAD --not --remotes`) and pushes with `-u`.
+- 0.1.3, **Gerrit repos:** if `gerrit.host` is set or the remote is on `googlesource.com`, the mod ignores `↑N` and shows no push button, only `●`. A plain push there goes nowhere useful.
+- 0.1.3, **files left out on purpose:** the commit prompt asks Claude to list each file it skipped in `<git dir>/git-band-skip.txt` (mtime in ms, a tab, the path). The band stops counting a listed file until the file changes again, so a skipped file can't hide new edits.
 
 ## paste-peek: see the image you just pasted (Windows)
 
 ![paste-peek](docs/img/paste-peek.png)
 
-**Windows only. Experimental, day one.** Claude Code shows a pasted image as `[Image #1]` and nothing else, so you can't tell whether you attached the right screenshot until Claude answers. paste-peek opens a small strip in the bottom-right corner of your Windows Terminal window with a thumbnail of every `[Image #N]` in your draft:
+**Windows only.** Claude Code shows a pasted image as `[Image #1]` and nothing else, so you can't tell whether you attached the right screenshot until Claude answers. paste-peek opens a small strip in the bottom-right corner of your Windows Terminal window with a thumbnail of every `[Image #N]` in your draft:
 
 - Click a thumbnail to enlarge it, click again to shrink. The strip never takes focus, so you keep typing.
 - Delete `[Image #2]` from the draft and #2 leaves the strip. Send the message and the strip closes.
@@ -232,7 +245,7 @@ claude plugin install paste-peek@field-notes-mods --scope user
 claude plugin install git-band@field-notes-mods --scope user
 ```
 
-Plugins are read from that folder in place: edit a file, then run `/reload-plugins`. `claude plugin test <folder>` runs the tests (fuel-bar 7, thai-mode 5, task-band 14, paste-peek 4, git-band 9).
+Plugins are read from that folder in place: edit a file, then run `/reload-plugins`. `claude plugin test <folder>` runs the tests (fuel-bar 7, thai-mode 5, task-band 14, paste-peek 4, git-band 11).
 
 For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `claude-update-safe.ps1` and `claude-launcher.cmd` in one folder on your `PATH`.
 
@@ -241,6 +254,8 @@ For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `
 ## ภาษาไทย (สรุป)
 
 บันทึกการทำ mod ให้ Claude Code บน Windows ในหนึ่งวัน ทั้งชิ้นที่ใช้จริงและชิ้นที่ลองแล้วทิ้ง
+
+**ผ่านไปสองสัปดาห์ (2026-10-21):** ใช้ทุกวันตั้งแต่ Claude Code 2.1.291 ถึง 2.1.306 (อัปเดต 12 ครั้ง) ไม่ต้องแก้ mod เพราะ engine เปลี่ยนเลย บั๊กที่เจอมาจากการใช้งานจริงทั้งหมด: task-band ค้างเมื่อหยุดงานด้วย TaskStop · แถบ AbovePrompt สองตัวบังกัน · git-band ขึ้นปุ่ม push ใน repo แบบ Gerrit · git-band เตือนไม่หยุดเรื่องไฟล์ที่ Claude ตั้งใจไม่ commit ทุกข้อแก้แล้ว
 
 - **fuel-bar:** แถบ 2 บรรทัดใต้ช่องพิมพ์ แสดง turn, โมเดล, effort, เกจ context (นับถึงจุด auto-compact), โควตา 5 ชม./7 วัน, ชื่อโปรเจกต์, อากาศ และเวลาที่ทำงานมาแล้ว ข้อมูลมาจาก engine หลังจบแต่ละ turn จึงไม่กิน token
 - **thai-mode:** แปลแถวเครื่องมือ, แถวสรุปที่พับไว้, spinner และเวลาที่ใช้ต่อ turn เป็นภาษาไทยด้วยพจนานุกรมในตัว `/thai` ใช้สลับเปิด/ปิด

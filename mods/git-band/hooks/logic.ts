@@ -95,6 +95,22 @@ export function isPending(r: RepoState): boolean {
   return r.dirty > 0 || r.ahead > 0 || r.phase !== undefined
 }
 
+export const SKIP_FILE = 'git-band-skip.txt'
+
+export function parseSkip(text: string): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/^(\d+)\t(.+)$/)
+    if (m) out.set(norm(m[2]!.trim()), Number(m[1]))
+  }
+  return out
+}
+
+export function isSkipped(skip: Map<string, number>, file: string, mtimeMs: number | undefined): boolean {
+  const at = skip.get(norm(file))
+  return at !== undefined && mtimeMs !== undefined && Math.floor(mtimeMs) === at
+}
+
 export function chipWidth(r: RepoState): number {
   let n = cellWidth(r.name) + 1
   if (r.phase === 'pushing') return n + cellWidth('⠹ กำลัง push')
@@ -134,6 +150,7 @@ export function commitPrompt(r: RepoState): string {
   lines.push(
     'ทำ: อ่าน git diff ก่อน · แยกเป็นหลาย commit ตามเรื่องของงาน (งานของ session นี้เป็น commit แยก) · เขียนข้อความ commit ให้ตรงงาน · ใช้ git identity ที่ตั้งไว้ใน repo',
     'ข้ามเฉพาะไฟล์ที่มีค่าลับ ไฟล์ชั่วคราว/ขยะ หรือโค้ดที่เห็นชัดว่าเสียครึ่งทาง แล้วบอก founder ว่าข้ามไฟล์ไหนเพราะอะไร · อย่าปฏิเสธเพียงเพราะไม่ใช่งานของ session นี้',
+    `ไฟล์ที่ข้าม (ยังไม่ลบ) ให้จดลง ${r.gitDir ?? '<git dir>'}/${SKIP_FILE} บรรทัดละไฟล์: <mtime ms>, tab, <path ตาม git status> · mtime ms = [DateTimeOffset]::new((Get-Item <file>).LastWriteTimeUtc).ToUnixTimeMilliseconds() · band จะไม่นับไฟล์นั้นจนกว่าไฟล์จะถูกแก้อีก`,
     'ยังไม่ต้อง push',
   )
   return lines.join('\n')
@@ -142,7 +159,12 @@ export function commitPrompt(r: RepoState): string {
 export function githubAccount(url: string): string | null {
   const m = url.trim().match(/^https:\/\/([^@/]+@)?github\.com\/([^/]+)\//i)
   if (!m || m[1]) return null
-  return m[2]
+  return m[2] ?? null
+}
+
+export function isGerrit(gerritHost: string, url: string): boolean {
+  if (/^true$/i.test(gerritHost.trim())) return true
+  return /^(https?|sso|rpc):\/\/[^/]*googlesource\.com\//i.test(url.trim())
 }
 
 export function fixPushPrompt(r: RepoState): string {

@@ -4,6 +4,7 @@ export type RepoState = {
   root: string
   name: string
   branch: string
+  gitDir?: string
   dirty: number
   files: string[]
   mine: string[]

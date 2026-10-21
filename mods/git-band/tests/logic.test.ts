@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { commandDirs, fit, githubAccount, isPending, norm, parseStatus, shortReason } from '../hooks/logic'
+import { commandDirs, commitPrompt, fit, githubAccount, isSkipped, parseSkip, isGerrit, isPending, norm, parseStatus, shortReason } from '../hooks/logic'
 import type { RepoState } from '../types'
 
 test('parses branch, upstream, ahead and files', () => {
@@ -61,4 +61,21 @@ test('github account comes from the remote owner, unless the URL already names o
   expect(githubAccount('https://alice@github.com/mona/test.git')).toBe(null)
   expect(githubAccount('git@github.com:mona/test.git')).toBe(null)
   expect(githubAccount('https://gitlab.com/mona/test.git')).toBe(null)
+})
+
+test('detects Gerrit repos from gerrit.host or a googlesource remote', () => {
+  expect(isGerrit('True\n', 'https://example.com/x.git')).toBe(true)
+  expect(isGerrit('', 'https://chromium.googlesource.com/devtools/devtools-frontend.git\n')).toBe(true)
+  expect(isGerrit('', 'https://github.com/some-owner/some-repo.git')).toBe(false)
+  expect(isGerrit('', 'https://github.com/x/googlesource.com.git')).toBe(false)
+  expect(isGerrit('false', '')).toBe(false)
+})
+
+test('a file Claude chose to skip stays hidden only until it changes again', () => {
+  const skip = parseSkip('1792500000123\ttests\\tmp.py\r\nbad line\n')
+  expect(isSkipped(skip, 'tests/tmp.py', 1792500000123.4)).toBe(true)
+  expect(isSkipped(skip, 'tests/tmp.py', 1792500999000)).toBe(false)
+  expect(isSkipped(skip, 'tests/tmp.py', undefined)).toBe(false)
+  expect(isSkipped(skip, 'other.py', 1792500000123)).toBe(false)
+  expect(commitPrompt({ root: 'D:/r', name: 'r', branch: 'main', gitDir: 'D:/r/.git', dirty: 1, files: ['a.py'], mine: [], ahead: 0 })).toContain('D:/r/.git/git-band-skip.txt')
 })

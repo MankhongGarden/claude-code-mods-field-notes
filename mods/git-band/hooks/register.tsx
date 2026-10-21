@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { RepoState } from '../types'
-import { C, cellWidth, commandDirs, commitPrompt, fit, fixPushPrompt, githubAccount, isPending, norm, parentDir, parseStatus, shortReason } from './logic'
+import { C, cellWidth, commandDirs, commitPrompt, fit, fixPushPrompt, githubAccount, isGerrit, isPending, isSkipped, norm, parentDir, parseSkip, parseStatus, shortReason, SKIP_FILE } from './logic'
 
 const repos = atom({ plugin: 'git-band', key: 'repos' } as const, [] as RepoState[])
 const roots = atom({ plugin: 'git-band', key: 'roots' } as const, [] as string[])
@@ -11,6 +11,8 @@ const busy = atom({ plugin: 'git-band', key: 'busy' } as const, false)
 
 const LEAD = 'git ค้าง  '
 const rootOf = new Map<string, string | null>()
+const gerritOf = new Map<string, boolean>()
+const gitDirs = new Map<string, string | undefined>()
 let refreshing: Promise<void> | null = null
 
 async function git($: EngineInterface, root: string, args: string[], timeoutMs = 15000) {
@@ -37,6 +39,36 @@ async function addDir($: EngineInterface, dir: string) {
   await update($, roots, list => (list.some(r => norm(r) === norm(root)) ? list : [...list, root]))
 }
 
+async function gitDirOf($: EngineInterface, root: string): Promise<string | undefined> {
+  const key = norm(root)
+  if (gitDirs.has(key)) return gitDirs.get(key)
+  let dir: string | undefined
+  try {
+    const r = await git($, root, ['rev-parse', '--absolute-git-dir'])
+    if (r.exitCode === 0) dir = r.stdout.trim() || undefined
+  } catch {
+    dir = undefined
+  }
+  gitDirs.set(key, dir)
+  return dir
+}
+
+async function gerrit($: EngineInterface, root: string): Promise<boolean> {
+  const key = norm(root)
+  const known = gerritOf.get(key)
+  if (known !== undefined) return known
+  let yes = false
+  try {
+    const host = await git($, root, ['config', '--get', 'gerrit.host'])
+    const url = await git($, root, ['remote', 'get-url', 'origin'])
+    yes = isGerrit(host.stdout, url.stdout)
+  } catch {
+    yes = false
+  }
+  gerritOf.set(key, yes)
+  return yes
+}
+
 async function scan($: EngineInterface, root: string, prev: RepoState | undefined, mineAbs: string[]): Promise<RepoState | null> {
   let st
   try {
@@ -58,16 +90,25 @@ async function scan($: EngineInterface, root: string, prev: RepoState | undefine
       ahead = 0
     }
   }
+  if (ahead > 0 && (await gerrit($, root))) ahead = 0
   const base = norm(root)
-  const mine = st.files.filter(f => mineAbs.includes(`${base}/${norm(f)}`))
+  const gitDir = await gitDirOf($, root)
+  const skip = gitDir ? parseSkip(await $.fs.read(`${gitDir}/${SKIP_FILE}`).catch(() => '')) : new Map<string, number>()
+  const files: string[] = []
+  for (const f of st.files) {
+    const stat = skip.size ? await $.fs.stat(`${root}/${f}`).catch(() => undefined) : undefined
+    if (!isSkipped(skip, f, stat?.mtimeMs)) files.push(f)
+  }
+  const mine = files.filter(f => mineAbs.includes(`${base}/${norm(f)}`))
   const name = root.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? root
   const keep = prev?.phase === 'fail' || prev?.phase === 'pushing' || prev?.phase === 'done' ? prev : undefined
   return {
     root,
     name,
     branch: st.branch,
-    dirty: st.files.length,
-    files: st.files,
+    gitDir,
+    dirty: files.length,
+    files,
     mine,
     ahead,
     phase: keep?.phase,
