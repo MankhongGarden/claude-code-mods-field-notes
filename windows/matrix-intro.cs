@@ -11,6 +11,12 @@ static class MatrixIntro
     [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int n);
     [DllImport("kernel32.dll")] static extern bool GetConsoleMode(IntPtr h, out uint m);
     [DllImport("kernel32.dll")] static extern bool SetConsoleMode(IntPtr h, uint m);
+    [DllImport("kernel32.dll")] static extern bool GetConsoleScreenBufferInfo(IntPtr h, out CSBI i);
+    [DllImport("kernel32.dll")] static extern bool SetConsoleWindowInfo(IntPtr h, bool abs, ref SMALL_RECT r);
+    [StructLayout(LayoutKind.Sequential)] struct COORD { public short X, Y; }
+    [StructLayout(LayoutKind.Sequential)] struct SMALL_RECT { public short L, T, R, B; }
+    [StructLayout(LayoutKind.Sequential)] struct CSBI { public COORD Size, Cursor; public short Attr; public SMALL_RECT Win; public COORD Max; }
+    const uint LineInput = 0x0002;
 
     const string Glyphs = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789";
     static readonly string[] Shades = {
@@ -37,7 +43,10 @@ static class MatrixIntro
         var hOut = GetStdHandle(-11);
         uint mode;
         if (GetConsoleMode(hOut, out mode)) SetConsoleMode(hOut, mode | 0x0004);
-        var o = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false), 1 << 16);
+        var hIn = GetStdHandle(-10);
+        uint inMode;
+        bool watchInput = GetConsoleMode(hIn, out inMode) && (inMode & LineInput) != 0;
+        var o =new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false), 1 << 16);
 
         var configDir = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
         if (string.IsNullOrEmpty(configDir)) configDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
@@ -70,6 +79,7 @@ static class MatrixIntro
         while (sw.ElapsedMilliseconds < MaxMs)
         {
             long t = sw.ElapsedMilliseconds;
+            if (watchInput && GetConsoleMode(hIn, out inMode) && (inMode & LineInput) == 0) break;
             if (t >= nextCheck)
             {
                 nextCheck = t + 120;
@@ -125,9 +135,24 @@ static class MatrixIntro
             int spare = FrameMs - (int)(sw.ElapsedMilliseconds - t);
             if (spare > 0) Thread.Sleep(spare);
         }
-        o.Write("\x1b[0m");
+        o.Write("\x1b[0m\x1b[2J\x1b[3J\x1b[H");
         o.Flush();
+        Thread.Sleep(400);
+        ForceRedraw(hOut);
         return 0;
+    }
+
+    static void ForceRedraw(IntPtr hOut)
+    {
+        CSBI i;
+        if (!GetConsoleScreenBufferInfo(hOut, out i)) return;
+        var w = i.Win;
+        if (w.R - w.L < 2) return;
+        w.R -= 1;
+        if (!SetConsoleWindowInfo(hOut, true, ref w)) return;
+        Thread.Sleep(150);
+        w.R += 1;
+        SetConsoleWindowInfo(hOut, true, ref w);
     }
 
     static StringBuilder Cell(StringBuilder sb, int x, int y)
