@@ -13,10 +13,10 @@ static class MatrixIntro
     [DllImport("kernel32.dll")] static extern bool SetConsoleMode(IntPtr h, uint m);
     [DllImport("kernel32.dll")] static extern bool GetConsoleScreenBufferInfo(IntPtr h, out CSBI i);
     [DllImport("kernel32.dll")] static extern bool SetConsoleWindowInfo(IntPtr h, bool abs, ref SMALL_RECT r);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool ReadConsoleOutputCharacter(IntPtr h, StringBuilder s, uint len, COORD at, out uint read);
     [StructLayout(LayoutKind.Sequential)] struct COORD { public short X, Y; }
     [StructLayout(LayoutKind.Sequential)] struct SMALL_RECT { public short L, T, R, B; }
     [StructLayout(LayoutKind.Sequential)] struct CSBI { public COORD Size, Cursor; public short Attr; public SMALL_RECT Win; public COORD Max; }
-    const uint LineInput = 0x0002;
 
     const string Glyphs = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789";
     static readonly string[] Shades = {
@@ -43,9 +43,6 @@ static class MatrixIntro
         var hOut = GetStdHandle(-11);
         uint mode;
         if (GetConsoleMode(hOut, out mode)) SetConsoleMode(hOut, mode | 0x0004);
-        var hIn = GetStdHandle(-10);
-        uint inMode;
-        bool watchInput = GetConsoleMode(hIn, out inMode) && (inMode & LineInput) != 0;
         var o =new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false), 1 << 16);
 
         var configDir = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
@@ -79,11 +76,11 @@ static class MatrixIntro
         while (sw.ElapsedMilliseconds < MaxMs)
         {
             long t = sw.ElapsedMilliseconds;
-            if (watchInput && GetConsoleMode(hIn, out inMode) && (inMode & LineInput) == 0) break;
             if (t >= nextCheck)
             {
                 nextCheck = t + 120;
                 if (startups0 >= 0 && StartupCount(claudeJson) > startups0) break;
+                if (ClaudeDrew(hOut, W, H, nameRow)) break;
             }
             sb.Clear();
             for (int x = 0; x < W; x++)
@@ -153,6 +150,30 @@ static class MatrixIntro
         Thread.Sleep(150);
         w.R += 1;
         SetConsoleWindowInfo(hOut, true, ref w);
+    }
+
+    static bool ClaudeDrew(IntPtr hOut, int W, int H, int nameRow)
+    {
+        CSBI i;
+        if (!GetConsoleScreenBufferInfo(hOut, out i)) return false;
+        var buf = new StringBuilder(W + 1);
+        int hits = 0;
+        for (int y = 0; y < H; y++)
+        {
+            if (y >= nameRow - 1 && y <= nameRow + 1) continue;
+            buf.Length = 0;
+            buf.Capacity = Math.Max(buf.Capacity, W + 1);
+            uint read;
+            var at = new COORD { X = i.Win.L, Y = (short)(i.Win.T + y) };
+            if (!ReadConsoleOutputCharacter(hOut, buf, (uint)W, at, out read)) return false;
+            for (int k = 0; k < read && k < buf.Length; k++)
+            {
+                char c = buf[k];
+                if ((c >= 'a' && c <= 'z') || c == '─' || c == '❯') hits++;
+            }
+            if (hits >= 8) return true;
+        }
+        return false;
     }
 
     static StringBuilder Cell(StringBuilder sb, int x, int y)

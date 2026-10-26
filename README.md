@@ -11,7 +11,7 @@ One long session of building Claude Code mods on Windows 11, written up honestly
 | [task-band](#task-band-background-work-above-the-prompt) | in daily use | The engine tells a mod when an agent ends right away, but shell/monitor/workflow ends only reach it at the next tool call while Claude is busy. And there is no progress % for anything. |
 | [paste-peek](#paste-peek-see-the-image-you-just-pasted-windows) | in daily use | The mod API can draw images only through the kitty protocol, which Windows Terminal lacks. A tiny native window beside the terminal does the job, and Claude Code already saves each pasted image to disk before you send. |
 | [git-band](#git-band-uncommitted-and-unpushed-work-above-the-prompt) | in daily use | Two bands in `AbovePrompt` hide each other unless each one awaits `next(e)` and stacks the result. The engine has no git events, so the mod works out which repos the session touched from the tool calls. |
-| [Matrix intro](#matrix-boot-intro) | in daily use | A sequential intro always leaves a blank gap. Run it in parallel and stop on a file Claude writes before its first frame, or as soon as Claude puts the console in raw mode for a dialog. |
+| [Matrix intro](#matrix-boot-intro) | in daily use | A sequential intro always leaves a blank gap. Run it in parallel and stop on a file Claude writes before its first frame, or as soon as Claude's own text (a dialog) appears in the console buffer. |
 | [Safe updater](#safe-updater-for-the-npm-install) | in daily use | Auto-update on Windows can leave `claude.exe` as a 500-byte stub. Stage, verify, then rename-and-swap. |
 | [Right-side pane + widgets](#tried-and-dropped) | dropped | The dock frame belongs to the engine, and Thai text breaks in the Windows Terminal grid with every font I tried. |
 | [project-band above the prompt](#tried-and-dropped) | dropped | Engine notifications render *between* your band and the prompt, and you cannot intercept them. |
@@ -177,7 +177,8 @@ What works:
 
 **Dialogs before the first frame (fixed 2026-10-26).** The "Accessing workspace" trust dialog (and any other prompt Claude shows before its first screen) comes *before* the `numStartups` bump. The old intro rained right over it, and when it stopped, the dialog stayed hidden: Claude repaints only the cells that change, so the leftover rain never went away. What fixed it:
 
-- Watch the console **input** mode as well. While Claude loads, stdin is in line mode. Claude switches it off (mode `0x208` here) the moment it shows anything that takes keys: a dialog or the prompt. The intro checks this every frame and stops on the change.
+- Watch the console **screen buffer** as well. Every 120 ms the intro reads the visible rows with `ReadConsoleOutputCharacter` and stops once it finds Claude's own text (lowercase letters, `─` or `❯`, which the rain never draws).
+- Do not watch the console input mode for this (the first fix, 2026-10-26). Claude takes stdin out of line mode about 50 ms after it starts, on every launch, to capture early keystrokes. So whenever the intro won the startup race it saw the switch and stopped at once, and the rain vanished (2026-10-27).
 - On stop, clear the screen, wait 400 ms, then narrow the console by one column and widen it back (`SetConsoleWindowInfo`). Claude treats that as a resize and repaints the whole screen, so whatever it already drew comes back clean.
 - Tried and failed: writing a fake `WINDOW_BUFFER_SIZE_EVENT` into the input buffer with `WriteConsoleInput`. Claude ignores it. Only a real size change triggers the repaint.
 
@@ -269,7 +270,7 @@ For the intro: compile `windows/matrix-intro.cs`, then put `matrix-intro.exe`, `
 - **task-band:** กรอบ "งานเบื้องหลัง" เหนือช่องพิมพ์ แสดง agent, Workflow, คำสั่งเบื้องหลัง และ Monitor ทีละ 3 งาน แต่ละงานมีเกจของตัวเอง งานที่รันอยู่ขึ้นก่อน กด Ctrl+X แล้ว Tab เพื่อเลื่อนหน้าด้วยลูกศร
 - **paste-peek (Windows):** กรอบรูปเล็กลอยที่มุมขวาล่างของ Windows Terminal แสดงรูปทุก `[Image #N]` ที่วางหรือลากมาไว้ในข้อความ ก่อนกดส่ง คลิกเพื่อขยาย ลบ `[Image #N]` แล้วรูปหายจากกรอบ กดส่งแล้วกรอบปิดเอง ซ่อนเมื่อสลับไปหน้าต่างอื่น ใช้ RAM ประมาณ 24 MB เฉพาะตอนมีรูปแนบ ไม่แนบไฟล์ exe ไว้ใน repo แต่จะคอมไพล์จากโค้ดต้นฉบับตอนใช้ครั้งแรก
 - **git-band:** แถบเหนือช่องพิมพ์ เตือน repo ที่ session นี้แตะแล้วยังไม่ commit (●) หรือยังไม่ push (↑) ปุ่ม commit ให้ Claude อ่าน diff แล้วแยก commit ตามเรื่อง ปุ่ม push ให้ mod push เองโดยไม่กิน token ถ้าไม่ผ่านมีปุ่มให้ Claude แก้ · บทเรียน: แถบใน `AbovePrompt` หลายตัวต้อง `await next(e)` แล้ววางซ้อนกัน ไม่งั้นบังกันเอง
-- **Matrix intro:** แสดงฝนตัวอักษรระหว่างรอ Claude โหลด ต้องรันขนานกับ Claude และหยุดเมื่อ `numStartups` เพิ่ม ถ้ารันเรียงกันจะมีจอว่างเสมอ · 2026-10-26 แก้บั๊กฝนบังหน้าต่าง trust folder: หยุดทันทีที่ Claude เปลี่ยนคอนโซลเป็นโหมดรับคีย์ แล้วล้างจอ + ย่อ/ขยายคอนโซล 1 คอลัมน์ให้ Claude วาดใหม่ทั้งจอ
+- **Matrix intro:** แสดงฝนตัวอักษรระหว่างรอ Claude โหลด ต้องรันขนานกับ Claude และหยุดเมื่อ `numStartups` เพิ่ม ถ้ารันเรียงกันจะมีจอว่างเสมอ · 2026-10-26 แก้บั๊กฝนบังหน้าต่าง trust folder: หยุดทันทีที่เห็นข้อความของ Claude บนจอ (2026-10-27 เลิกดูโหมดรับคีย์ เพราะ Claude เปลี่ยนโหมดนี้ตั้งแต่ ~50 ms แรกทุกครั้ง ฝนเลยหายทันที) แล้วล้างจอ + ย่อ/ขยายคอนโซล 1 คอลัมน์ให้ Claude วาดใหม่ทั้งจอ
 - **ตัวอัปเดตปลอดภัย:** แก้ปัญหา auto-update ทำให้ `claude.exe` เหลือไฟล์ 500 ไบต์ ใช้วิธีติดตั้งแยกไว้ก่อน ตรวจว่าใช้ได้ แล้วค่อยเปลี่ยนชื่อสลับไฟล์
 - **ที่ลองแล้วไม่เวิร์ค:**
   - แผงด้านขวา: กรอบเป็นของ engine และสระ/วรรณยุกต์ไทยเพี้ยนใน Windows Terminal ทุกฟอนต์ที่ลอง
